@@ -1,0 +1,10 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  labels:
+    {{- include "ratelimiter.labels" . | nindent 4 }}
+  name: {{ template "ratelimiter.configMapName" . }}
+  namespace: {{ template "ratelimiter.namespace" . }}
+data:
+  config.yaml: |
+    {{ include "ratelimiter.calculatedConfig" . | nindent 4 }}
