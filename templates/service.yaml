@@ -1,0 +1,36 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ template "ratelimiter.serviceName" . }}
+  labels:
+    {{- include "ratelimiter.labels" . | nindent 4 }}
+  namespace: {{ template "ratelimiter.namespace" . }}
+  {{- with .Values.service.annotations }}
+  annotations: {{ tpl (toYaml .) $ | nindent 4 }}
+  {{- end }}
+spec:
+  ports:
+  - port: {{ .Values.service.port.http }}
+    targetPort: {{ .Values.service.port.http }}
+    protocol: TCP
+    name: http-port
+    {{- if and (eq .Values.service.type "NodePort") (not (empty .Values.service.nodePort)) }}
+    nodePort: {{ .Values.service.nodePort }}
+    {{- end }}
+  - port: {{ .Values.service.port.grpc }}
+    targetPort: {{ .Values.service.port.grpc }}
+    protocol: TCP
+    name: grpc-port
+    {{- if and (eq .Values.service.type "NodePort") (not (empty .Values.service.nodePort)) }}
+    nodePort: {{ .Values.service.nodePort }}
+    {{- end }}
+  - port: {{ .Values.service.port.httpDebug }}
+    targetPort: {{ .Values.service.port.httpDebug }}
+    protocol: TCP
+    name: http-debug
+    {{- if and (eq .Values.service.type "NodePort") (not (empty .Values.service.nodePort)) }}
+    nodePort: {{ .Values.service.nodePort }}
+    {{- end }}
+  selector:
+    {{- include "ratelimiter.matchLabels" . | nindent 4 }}
+  type: {{ .Values.service.type }}
