@@ -1,0 +1,126 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ template "ratelimiter.fullname" . }}
+  labels:
+    {{- include "ratelimiter.labels" . | nindent 4 }}
+  namespace: {{ template "ratelimiter.namespace" . }}
+spec:
+  {{- with .Values.replicaCount }}
+  replicas: {{ . }}
+  {{- end }}
+  selector:
+    matchLabels:
+      {{- include "ratelimiter.matchLabels" . | nindent 6 }}
+      {{ if .Values.updateStrategy }}
+  strategy:
+    type:
+      {{ toYaml .Values.updateStrategy | nindent 6 | trim }}
+      {{ end }}
+  template:
+    metadata:
+      labels:
+        {{- include "ratelimiter.labels" . | nindent 8 }}
+        {{- range $key, $value := .Values.podLabels }}
+        {{ $key }}: {{ $value }}
+        {{- end }}
+      {{- with .Values.podAnnotations }}
+      annotations: {{ tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.image.pullSecrets }}
+      imagePullSecrets: {{ tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.podSecurityContext }}
+      securityContext: {{ tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- if or .Values.antiAffinity.enable .Values.podAffinity .Values.nodeAffinity }}
+      affinity:
+        {{- if .Values.antiAffinity.enable }}
+        {{- with .Values.podAntiAffinity }}
+        podAntiAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- end }}
+        {{- with .Values.podAffinity }}
+        podAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+        {{- with .Values.nodeAffinity }}
+        nodeAffinity:
+          {{- tpl (toYaml .) $ | nindent 10 }}
+        {{- end }}
+      {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector: {{ tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations: {{ tpl (toYaml .) $ | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ template "ratelimiter.serviceAccountName" . }}
+      {{- if .Values.priorityClassName }}
+      priorityClassName: {{ .Values.priorityClassName | quote }}
+      {{- end }}
+      containers:
+        - name: ratelimiter
+          image: {{ include "ratelimiter.image" (dict "image" .Values.image "defaultTag" .Chart.AppVersion) | quote }}
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["/bin/ratelimit"]
+          {{- with .Values.resources }}
+          resources: {{ tpl (toYaml .) $ | nindent 12 }}
+          {{- end }}
+          {{- if .Values.securityContext }}
+          securityContext: {{ include "ratelimiter.securityContext" . | nindent 12 }}
+          {{- end }}
+          ports:
+          - containerPort: 8080
+          - containerPort: 8081
+          - containerPort: 6070
+          env:
+            - name: LOG_LEVEL
+              value: {{ .Values.logLevel }}
+            - name: REDIS_SOCKET_TYPE
+              value: {{ .Values.redisSocketType }}
+            - name: REDIS_URL
+              value: {{ .Values.redisUrl }}
+            - name: USE_STATSD
+              value: "{{ .Values.statsd.use | toString}}"
+            {{- if .Values.statsd.use }}
+            - name: STATSD_HOST
+              value: {{ .Values.statsd.host | toString}}
+            - name: STATSD_PORT
+              value: "{{ .Values.statsd.port | toString}}"
+            {{- end }}
+            - name: RUNTIME_ROOT
+              value: /data
+            - name: RUNTIME_SUBDIRECTORY
+              value: ratelimit
+            - name: RUNTIME_WATCH_ROOT
+              value: "false"
+            - name: RUNTIME_IGNOREDOTFILES
+              value: "true"
+          {{- if or .Values.extraEnvVarsCM .Values.extraEnvVarsSecret }}
+          envFrom:
+            {{- if .Values.extraEnvVarsCM }}
+            - configMapRef:
+                name: {{ .Values.extraEnvVarsCM }}
+            {{- end }}
+            {{- if .Values.extraEnvVarsSecret }}
+            - secretRef:
+                name: {{ .Values.extraEnvVarsSecret }}
+            {{- end }}
+          {{- end }}
+        {{- with .Values.livenessProbe }}
+          livenessProbe: {{ tpl (toYaml .) $ | nindent 12 }}
+        {{- end }}
+        {{- with .Values.readinessProbe }}
+          readinessProbe: {{ tpl (toYaml .) $ | nindent 12 }}
+        {{- end }}
+          volumeMounts:
+            - mountPath: /data/ratelimit/config
+              # $RUNTIME_ROOT/$RUNTIME_SUBDIRECTORY/$RUNTIME_APPDIRECTORY/config.yaml
+              name: config-volume
+      volumes:
+      - name: config-volume
+        configMap:
+          name: {{ template "ratelimiter.configMapName" . }}
