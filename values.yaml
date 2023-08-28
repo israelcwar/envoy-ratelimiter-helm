@@ -1,0 +1,169 @@
+replicaCount: 2
+updateStrategy: Recreate
+# -- Override the name of the chart
+nameOverride:
+
+# -- Override the expanded name of the chart
+fullnameOverride:
+
+# -- Namespace the chart deploys to
+namespace: ""
+
+# -- Additional labels
+customLabels: {}
+
+# -- Additional labels to add to each pod
+podLabels: {}
+  # example.com/label: foo
+
+# -- Additional annotations to add to each pod
+podAnnotations: {}
+  # example.com/annotation: foo
+image:
+  # -- Image registry
+  registry:
+  # If you want to manage the registry you should remove it from the repository
+  # registry: ghcr.io
+  # repository: ratelimiter/ratelimiter
+  # -- Image repository
+  repository:  envoyproxy/ratelimit
+  # -- Image tag
+  # Defaults to appVersion in Chart.yaml if omitted
+  tag: e059638d
+  # -- Image pull policy
+  pullPolicy: IfNotPresent
+  # -- Image pull secrets
+  pullSecrets: []
+  # - secretName
+# -- Security context for the pod
+podSecurityContext:
+  runAsUser: 2000
+  runAsGroup: 3000
+
+antiAffinity:
+  # -- Pod antiAffinities toggle.
+  # Enabled by default but can be disabled if you want to schedule pods to the same node.
+  enable: true
+
+# -- Pod anti affinity constraints.
+# @default -- See [values.yaml](values.yaml)
+podAntiAffinity:
+  preferredDuringSchedulingIgnoredDuringExecution:
+    - weight: 1
+      podAffinityTerm:
+        labelSelector:
+          matchExpressions:
+            - key: app.kubernetes.io/name
+              operator: In
+              values:
+                - '{{ template "ratelimiter.name" . }}'
+        topologyKey: kubernetes.io/hostname
+
+# -- Pod affinity constraints.
+podAffinity: {}
+
+# -- Node affinity constraints.
+nodeAffinity: {}
+
+podDisruptionBudget:
+  # -- Configures the minimum available pods for ratelimiter disruptions.
+  # Cannot be used if `maxUnavailable` is set.
+  minAvailable: 1
+  # -- Configures the maximum unavailable pods for ratelimiter disruptions.
+  # Cannot be used if `minAvailable` is set.
+  maxUnavailable:
+
+# -- Node labels for pod assignment
+nodeSelector: {}
+
+# -- List of node taints to tolerate
+tolerations: {}
+
+  # -- Optional priority class
+priorityClassName: ''
+
+resources:
+  # -- Pod resource limits
+  limits:
+    memory: 384Mi
+  # -- Pod resource requests
+  requests:
+    cpu: 100m
+    memory: 128Mi
+
+# -- Security context for the containers
+securityContext:
+  runAsNonRoot: true
+  privileged: false
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+  seccompProfile:
+    type: RuntimeDefault
+
+#this uses env variables to configure our ratelimiter pod
+logLevel: debug
+redisSocketType: tcp
+redisUrl: ""
+statsd:
+  use: "false"
+  host: ""
+  port: 9125
+
+
+extraEnvVarsCM: ""
+extraEnvVarsSecret: ""
+service:
+  # -- Service port.
+  port: 
+    http: 8080
+    grpc: 8081
+    httpDebug: 6070
+  # -- Service type.
+  type: ClusterIP
+  # -- Service node port.
+  # Only used if `service.type` is `NodePort`.
+  nodePort:
+  # -- Service annotations.
+  annotations: {}
+
+#see https://github.com/envoyproxy/ratelimit#configuration
+ratelimiter:
+  config: |
+    domain: myratelimit
+    descriptors:
+      - key: somedescriptor
+        rate_limit:
+          unit: minute
+          requests_per_unit: 100
+
+  structuredConfig: {}
+rbac:
+  # -- Create ClusterRoles, ClusterRoleBindings, and ServiceAccount
+  create: true
+  serviceAccount:
+    # -- Create a ServiceAccount
+    create: true
+    # -- The ServiceAccount name
+    name:
+    # -- Annotations for the ServiceAccount
+    annotations: {}
+      # example.com/annotation: value
+
+livenessProbe:
+  httpGet:
+    path: /healthcheck
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+readinessProbe:
+  httpGet:
+    path: /healthcheck
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 3
+
